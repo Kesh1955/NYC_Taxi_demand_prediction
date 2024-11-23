@@ -1,12 +1,22 @@
 [tool.poetry]
-name = "src"
+name = "poetry-taxi-demand-predictor"
 version = "0.1.0"
 description = ""
 authors = ["keshan <keshansharp123@outlook.com>"]
 readme = "README.md"
+packages = [{ include = "src" }]  # Explicitly include the src folder as a package
+
 
 [tool.poetry.dependencies]
-python = "^3.13"
+python = "^3.10"
+jupyter = "^1.1.1"
+requests = "^2.32.3"
+pandas = "^2.2.3"
+poetry = "^1.8.4"
+pyarrow = "^18.0.0"
+tqdm = "^4.67.0"
+plotly = "^5.24.1"
+
 
 
 [build-system]
