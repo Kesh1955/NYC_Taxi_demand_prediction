@@ -16,7 +16,7 @@ def download_one_file_of_raw_data(year: int, month: int) -> Path:
     response = requests.get(URL)
 
     if response.status_code == 200:
-        path = RAW_DATA_DIR / f"/rides_{year}-{month:02d}.parquet"
+        path = RAW_DATA_DIR / f"rides_{year}-{month:02d}.parquet"
         open(path, "wb").write(response.content)
         return path
     else:
