@@ -41,7 +41,7 @@ jobs:
 
       # List files in the notebooks directory
       - name: List files in notebooks directory
-        run: dir poetry_taxi_demand_predictor/notebooks
+        run: dir notebooks
 
       # Poetry install to install all the dependencies or requirements
       - name: Install Dependencies
