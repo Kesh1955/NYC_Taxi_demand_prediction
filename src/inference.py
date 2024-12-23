@@ -27,6 +27,62 @@ def get_model_predictions(model, features: pd.DataFrame) -> pd.DataFrame:
     
     return results
 
+def diagnose_timeseries_completeness(ts_data, n_features):
+    """
+    Diagnoses why the time series data might be incomplete by checking various aspects
+    of the data structure and identifying potential gaps.
+    
+    Args:
+        ts_data (pd.DataFrame): The time series data to analyze
+        n_features (int): Expected number of features per location
+    """
+    # 1. Basic data overview
+    print("=== Data Overview ===")
+    print(f"Total records: {len(ts_data)}")
+    print(f"Unique locations: {len(ts_data['pickup_location_id'].unique())}")
+    print(f"Expected features per location: {n_features}")
+    print(f"Expected total records: {n_features * len(ts_data['pickup_location_id'].unique())}")
+    
+    # 2. Check for missing hours in each location
+    print("\n=== Time Series Continuity Analysis ===")
+    for location_id in ts_data['pickup_location_id'].unique():
+        location_data = ts_data[ts_data.pickup_location_id == location_id]
+        n_records = len(location_data)
+        
+        if n_records != n_features:
+            print(f"\nLocation ID {location_id} has {n_records} records (expected {n_features})")
+            
+            # Show the time range for this location
+            print(f"Time range: {location_data['pickup_hour'].min()} to {location_data['pickup_hour'].max()}")
+            
+            # Find missing hours
+            hours = pd.date_range(
+                start=location_data['pickup_hour'].min(),
+                end=location_data['pickup_hour'].max(),
+                freq='H'
+            )
+            missing_hours = set(hours) - set(location_data['pickup_hour'])
+            if missing_hours:
+                print(f"Missing {len(missing_hours)} hours:")
+                print(sorted(missing_hours)[:5], "..." if len(missing_hours) > 5 else "")
+    
+    # 3. Check time range consistency
+    print("\n=== Time Range Analysis ===")
+    print(f"Overall time range: {ts_data['pickup_hour'].min()} to {ts_data['pickup_hour'].max()}")
+    total_hours = len(pd.date_range(
+        start=ts_data['pickup_hour'].min(),
+        end=ts_data['pickup_hour'].max(),
+        freq='H'
+    ))
+    print(f"Total hours in range: {total_hours}")
+
+    return {
+        'total_records': len(ts_data),
+        'unique_locations': len(ts_data['pickup_location_id'].unique()),
+        'expected_records': n_features * len(ts_data['pickup_location_id'].unique()),
+        'is_complete': len(ts_data) == n_features * len(ts_data['pickup_location_id'].unique())
+    }
+
 
 def load_batch_of_features_from_store(
     current_date: pd.Timestamp,    
@@ -52,7 +108,7 @@ def load_batch_of_features_from_store(
 
     # fetch data from the feature store
     # current_date = pd.to_datetime('2024-10-31 00:00:00')
-    current_date = pd.to_datetime('2024-10-31 00:00:00')
+    current_date = pd.to_datetime('2024-10-30 23:00:00')
     fetch_data_from = current_date - timedelta(days=28)
     fetch_data_to = current_date - timedelta(hours=1)
 
@@ -72,6 +128,10 @@ def load_batch_of_features_from_store(
 
     # validate we are not missing data in the feature store
     location_ids = ts_data['pickup_location_id'].unique()
+
+    # Add this before the assertion
+    diagnostics = diagnose_timeseries_completeness(ts_data, n_features)
+    
     assert len(ts_data) == config.N_FEATURES * len(location_ids), \
         "Time-series data is not complete. Make sure your feature pipeline is up and runnning."
 
@@ -149,9 +209,9 @@ def load_predictions_from_store(
     from_pickup_hour = pd.to_datetime(from_pickup_hour).tz_localize(None)
     to_pickup_hour = pd.to_datetime(to_pickup_hour).tz_localize(None)
 
-    print("Available columns:", predictions.columns)
-    print("\nPredictions dataframe head:")
-    print(predictions.head())
+    # print("Available columns:", predictions.columns)
+    # print("\nPredictions dataframe head:")
+    # print(predictions.head())
 
     # Filter to desired range
     predictions = predictions[predictions.pickup_hour.between(from_pickup_hour, to_pickup_hour)]
@@ -159,6 +219,14 @@ def load_predictions_from_store(
     print(f"Filtered time range: {predictions['pickup_hour'].min()} to {predictions['pickup_hour'].max()}")
 
     predictions.sort_values(by=['pickup_hour', 'pickup_location_id'], inplace=True)
+
+    # Before returning, let's check what columns we have
+    print("Columns in predictions before returning:")
+    print(predictions.columns)
+    
+    # Also check a sample of the data
+    print("\nSample of predictions data:")
+    print(predictions.head())
     return predictions
 
 # # %%

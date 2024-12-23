@@ -16,28 +16,23 @@ from src.plot import plot_one_sample
 # Making the website as wide as possible - styling element
 st.set_page_config(layout="wide")
 
-# title
-from datetime import datetime, timedelta,timezone
-def aware_utcnow():
-    return datetime.now(timezone.utc)
-aware_utcnow()
 
 # Doesn't work 
 # current_date = datetime.strptime('2023-10-31 00:00:03', '%Y-%m-%d %H:%M:%S')
 
 # Doesn't work 
 # current_date = pd.to_datetime('2024-10-30 23:00:00')
-current_date = pd.to_datetime('2024-10-31 00:00:00')
+current_date = pd.to_datetime('2024-10-30 23:00:00')
 
 # Doesn't work 
 # current_date = pd.to_datetime(aware_utcnow()).floor('h')
 st.title(f'Taxi demand prediction 🚕')
 st.header(f'{current_date} ')
 
-# This will show progress on how things are running on UI
 progress_bar = st.sidebar.header('⚙️ Working Progress')
 progress_bar = st.sidebar.progress(0)
-N_STEPS = 6
+N_STEPS = 7
+
 def load_shape_data_file() -> gpd.geodataframe.GeoDataFrame:
     """
     Fetches remote file with shape data, that we later use to plot the
@@ -66,188 +61,107 @@ def load_shape_data_file() -> gpd.geodataframe.GeoDataFrame:
     # load and return shape file
     return gpd.read_file(DATA_DIR / 'taxi_zones/taxi_zones.shp').to_crs('epsg:4326')
 
-
-# @st.cache_data
-def load_batch_of_features_from_store(current_date: datetime) -> pd.DataFrame:
-    """Wrapped version of src.inference.load_batch_of_features_from_store, so
-    we can add Streamlit caching
-
-    Args:
-        current_date (datetime): _description_
-
-    Returns:
-        pd.DataFrame: n_features + 2 columns:
-            - `rides_previous_N_hour`
-            - `rides_previous_{N-1}_hour`
-            - ...
-            - `rides_previous_1_hour`
-            - `pickup_hour`
-            - `pickup_location_id`
-    """
-    return load_batch_of_features_from_store(current_date)
-
-# @st.cache_data
-def _load_predictions_from_store(
-    from_pickup_hour: datetime,
-    to_pickup_hour: datetime
-    ) -> pd.DataFrame:
-    """
-    Wrapped version of src.inference.load_predictions_from_store, so we
-    can add Streamlit caching
-
-    Args:
-        from_pickup_hour (datetime): min datetime (rounded hour) for which we want to get
-        predictions
-
-        to_pickup_hour (datetime): max datetime (rounded hour) for which we want to get
-        predictions
-
-    Returns:
-        pd.DataFrame: 2 columns: pickup_location_id, predicted_demand
-    """
-    return load_predictions_from_store(from_pickup_hour, to_pickup_hour)
-
 with st.spinner(text="Downloading shape file to plot taxi zones"):
     geo_df = load_shape_data_file()
     st.sidebar.write('✅ Shape file was downloaded ')
     progress_bar.progress(1/N_STEPS)
 
-with st.spinner(text="Fetching model predictions from the store"):
-    predictions_df = load_predictions_from_store(
-        from_pickup_hour=current_date - timedelta(hours=1),
-        to_pickup_hour=current_date
-    )
-    st.sidebar.write('✅ Model predictions arrived')
+with st.spinner(text="Fetching inference data from the store"):
+    features = load_batch_of_features_from_store(current_date)
+    st.sidebar.write('✅ Inference features fetched from the store')
     progress_bar.progress(2/N_STEPS)
+    print(f'{features}')
 
-# Add before the checks
-print(f"Available hours: {predictions_df['pickup_hour'].unique()}")
-print(f"Current date being checked: {current_date}")
+with st.spinner(text="Loading ML model from the model registry"):
+    model = load_model_from_registry()
+    st.sidebar.write('✅ ML model was successfully load from the registry ')
+    progress_bar.progress(3/N_STEPS)
 
-# Here we are checking the predictions for the current hour have already been computed
-# and are available
-next_hour_predictions_ready = \
-    False if predictions_df[predictions_df.pickup_hour == current_date].empty else True
-prev_hour_predictions_ready = \
-    False if predictions_df[predictions_df.pickup_hour == (current_date - timedelta(hours=1))].empty else True
+with st.spinner(text="Get model predictions"):
+    results = get_model_predictions(model, features)
+    st.sidebar.write('✅ Model predictions arrived ')
+    progress_bar.progress(4/N_STEPS)
 
-# breakpoint()
+with st.spinner(text="Preparing data to plot"):
 
-if next_hour_predictions_ready:
-    # predictions for the current hour are available
-    predictions_df = predictions_df[predictions_df.pickup_hour == current_date]
+    def pseudocolor(val, minval, maxval, startcolor, stopcolor):
+        """
+        Convert value in the range minval...maxval to a color in the range
+        startcolor to stopcolor. The colors passed and the the one returned are
+        composed of a sequence of N component values.
 
-elif prev_hour_predictions_ready:
-    # predictions for current hour are not available, so we use previous hour predictions
-    predictions_df = predictions_df[predictions_df.pickup_hour == (current_date - timedelta(hours=1))]
-    current_date = current_date - timedelta(hours=1)
-    st.subheader('⚠️ The most recent data is not yet available. Using last hour predictions')
-
-else:
-    raise Exception('Features are not available for the last 2 hours. Is your feature \
-                    pipeline up and running? 🤔')
-
-
-# with st.spinner(text="Preparing data to plot"):
-
-#     def pseudocolor(val, minval, maxval, startcolor, stopcolor):
-#         """
-#         Convert value in the range minval...maxval to a color in the range
-#         startcolor to stopcolor. The colors passed and the the one returned are
-#         composed of a sequence of N component values.
-
-#         Credits to https://stackoverflow.com/a/10907855
-#         """
-#         f = float(val-minval) / (maxval-minval)
-#         return tuple(f*(b-a)+a for (a, b) in zip(startcolor, stopcolor))
+        Credits to https://stackoverflow.com/a/10907855
+        """
+        f = float(val-minval) / (maxval-minval)
+        return tuple(f*(b-a)+a for (a, b) in zip(startcolor, stopcolor))
         
-#     df = pd.merge(geo_df, predictions_df,
-#                   right_on='pickup_location_id',
-#                   left_on='LocationID',
-#                   how='inner')
+    df = pd.merge(geo_df, results,
+                  right_on='pickup_location_id',
+                  left_on='LocationID',
+                  how='inner')
     
-#     print("Available columns:", df.columns)
-#     print("\nPredictions dataframe head:")
-#     print(df.head())
-    
-#     BLACK, GREEN = (0, 0, 0), (0, 255, 0)
-#     df['color_scaling'] = df['predicted_demand']
-#     max_pred, min_pred = df['color_scaling'].max(), df['color_scaling'].min()
-#     df['fill_color'] = df['color_scaling'].apply(lambda x: pseudocolor(x, min_pred, max_pred, BLACK, GREEN))
-#     progress_bar.progress(3/N_STEPS)
+    BLACK, GREEN = (0, 0, 0), (0, 255, 0)
+    df['color_scaling'] = df['predicted_demand']
+    max_pred, min_pred = df['color_scaling'].max(), df['color_scaling'].min()
+    df['fill_color'] = df['color_scaling'].apply(lambda x: pseudocolor(x, min_pred, max_pred, BLACK, GREEN))
+    progress_bar.progress(5/N_STEPS)
 
-# with st.spinner(text="Generating NYC Map"):
+    with st.spinner(text="Generating NYC Map"):
 
-#     INITIAL_VIEW_STATE = pdk.ViewState(
-#         latitude=40.7831,
-#         longitude=-73.9712,
-#         zoom=11,
-#         max_zoom=16,
-#         pitch=45,
-#         bearing=0
-#     )
+        INITIAL_VIEW_STATE = pdk.ViewState(
+        latitude=40.7831,
+        longitude=-73.9712,
+        zoom=11,
+        max_zoom=16,
+        pitch=45,
+        bearing=0
+    )
 
-#     geojson = pdk.Layer(
-#         "GeoJsonLayer",
-#         df,
-#         opacity=0.25,
-#         stroked=False,
-#         filled=True,
-#         extruded=False,
-#         wireframe=True,
-#         get_elevation=10,
-#         get_fill_color="fill_color",
-#         get_line_color=[255, 255, 255],
-#         auto_highlight=True,
-#         pickable=True,
-#     )
+    geojson = pdk.Layer(
+        "GeoJsonLayer",
+        df,
+        opacity=0.25,
+        stroked=False,
+        filled=True,
+        extruded=False,
+        wireframe=True,
+        get_elevation=10,
+        get_fill_color="fill_color",
+        get_line_color=[255, 255, 255],
+        auto_highlight=True,
+        pickable=True,
+    )
 
-#     tooltip = {"html": "<b>Zone:</b> [{LocationID}]{zone} <br /> <b>Predicted rides:</b> {predicted_demand}"}
+    tooltip = {"html": "<b>Zone:</b> [{LocationID}]{zone} <br /> <b>Predicted rides:</b> {predicted_demand}"}
 
-#     r = pdk.Deck(
-#         layers=[geojson],
-#         initial_view_state=INITIAL_VIEW_STATE,
-#         tooltip=tooltip
-#     )
+    r = pdk.Deck(
+        layers=[geojson],
+        initial_view_state=INITIAL_VIEW_STATE,
+        tooltip=tooltip
+    )
 
-#     st.pydeck_chart(r)
-#     progress_bar.progress(4/N_STEPS)
+    st.pydeck_chart(r)
+    progress_bar.progress(6/N_STEPS)
 
-
-# with st.spinner(text="Fetching batch of features used in the last run"):
-#     features_df = load_batch_of_features_from_store(current_date)
-#     st.sidebar.write('✅ Inference features fetched from the store')
-#     progress_bar.progress(5/N_STEPS)
-
-
-# with st.spinner(text="Plotting time-series data"):
+    with st.spinner(text="Plotting time-series data"):
    
-#     predictions_df = df
+        predictions_df = results
 
-#     row_indices = np.argsort(predictions_df['predicted_demand'].values)[::-1]
-#     n_to_plot = 10
+    row_indices = np.argsort(predictions_df['predicted_demand'].values)[::-1]
+    n_to_plot = 10
 
-#     # plot each time-series with the prediction
-#     for row_id in row_indices[:n_to_plot]:
+    # plot each time-series with the prediction
+    for row_id in row_indices[:n_to_plot]:
 
-#         # title
-#         location_id = predictions_df['pickup_location_id'].iloc[row_id]
-#         location_name = predictions_df['zone'].iloc[row_id]
-#         st.header(f'Location ID: {location_id} - {location_name}')
-
-#         # plot predictions
-#         prediction = predictions_df['predicted_demand'].iloc[row_id]
-#         st.metric(label="Predicted demand", value=int(prediction))
+        # plot figure
+        # generate figure
+        fig = plot_one_sample(
+            example_id=row_id,
+            features=features,
+            targets=predictions_df['predicted_demand'],
+            predictions=pd.Series(predictions_df['predicted_demand']),
+            display_title=False,
+        )
+        st.plotly_chart(fig, theme="streamlit", use_container_width=True, width=1000)
         
-#         # plot figure
-#         # generate figure
-#         fig = plot_one_sample(
-#             example_id=row_id,
-#             features=features_df,
-#             targets=predictions_df['predicted_demand'],
-#             predictions=pd.Series(predictions_df['predicted_demand']),
-#             display_title=False,
-#         )
-#         st.plotly_chart(fig, theme="streamlit", use_container_width=True, width=1000)
-        
-#     progress_bar.progress(6/N_STEPS)
+    progress_bar.progress(7/N_STEPS)
