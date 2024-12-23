@@ -1,4 +1,6 @@
 .env
+
+
 config.py
 raw
 data/
