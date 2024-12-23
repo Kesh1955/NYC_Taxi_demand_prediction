@@ -1,3 +1,5 @@
 .env
 config.py
 raw
+data/
+models/
