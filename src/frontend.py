@@ -8,7 +8,7 @@ import streamlit as st
 import geopandas as gpd
 import pydeck as pdk
 
-from src.inference import load_predictions_from_store, load_batch_of_features_from_store
+from src.inference import load_batch_of_features_from_store, load_model_from_registry, get_model_predictions
 
 from src.paths import DATA_DIR
 from src.plot import plot_one_sample
