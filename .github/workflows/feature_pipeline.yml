@@ -61,4 +61,4 @@ jobs:
           HOPSWORKS_API_KEY: ${{ secrets.HOPSWORKS_API_KEY }}
         run: |
           export HOPSWORKS_API_KEY=${{ secrets.HOPSWORKS_API_KEY }}
-          poetry run jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.kernel_name=poetry_taxi_demand_predictor poetry_taxi_demand_predictor/notebooks/12_feature_pipeline.ipynb
+          poetry run jupyter nbconvert --to notebook --execute --inplace --ExecutePreprocessor.kernel_name=poetry_taxi_demand_predictor notebooks/12_feature_pipeline.ipynb
