@@ -103,7 +103,22 @@ def load_batch_of_features_from_store(current_date: pd.Timestamp) -> pd.DataFram
     for i, location_id in enumerate(location_ids):
         ts_data_i = ts_data.loc[ts_data.pickup_location_id == location_id, :]
         ts_data_i = ts_data_i.sort_values(by=['pickup_hour'])
-        x[i, :] = ts_data_i['rides'].values[:config.N_FEATURES]
+        
+        # Debugging output to identify the issue
+        rides_values = ts_data_i['rides'].values
+        #print(f"Location ID: {location_id}")
+        #print(f"Number of data points: {len(rides_values)}")
+        #print(f"Expected: {config.N_FEATURES}")
+        
+        if len(rides_values) < config.N_FEATURES:
+            print(f"** Insufficient data for location_id {location_id}. Skipping or handling required. **")
+            continue  # Skip this iteration for now
+        
+        if len(rides_values) > config.N_FEATURES:
+            print(f"** More data than expected for location_id {location_id}. Truncating to fit. **")
+        
+        # Assignment (will trigger an error if len(rides_values) < config.N_FEATURES)
+        x[i, :] = rides_values[:config.N_FEATURES]
 
     features = pd.DataFrame(
         x,
@@ -111,6 +126,10 @@ def load_batch_of_features_from_store(current_date: pd.Timestamp) -> pd.DataFram
     )
     features['pickup_hour'] = current_date
     features['pickup_location_id'] = location_ids
+
+    return features
+
+
 # def load_batch_of_features_from_store(
 #     current_date: pd.Timestamp,    
 # ) -> pd.DataFrame:
