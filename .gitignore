@@ -4,3 +4,6 @@ raw
 data/
 models/
 
+.vscode/
+src/__pycache__/
+

@@ -24,7 +24,7 @@ MODEL_VERSION = '1'
 
 # # TODO: remove FEATURE_GROUP_NAME and FEATURE_GROUP_VERSION, and use FEATURE_GROUP_METADATA instead
 FEATURE_GROUP_NAME = "time_series_hourly_feature_group"
-FEATURE_GROUP_VERSION = 3
+FEATURE_GROUP_VERSION = 1 # updated to incldude pickup_hour as primary ket. V3 does not
 
 FEATURE_GROUP_METADATA = FeatureGroupConfig(
     name='time_series_hourly_feature_group',
@@ -50,7 +50,7 @@ FEATURE_VIEW_METADATA = FeatureViewConfig(
 FEATURE_GROUP_MODEL_PREDICTIONS = 'model_predictions_feature_group'
 FEATURE_GROUP_PREDICTIONS_METADATA = FeatureGroupConfig(
     name='model_predictions_feature_group',
-    version=4,
+    version=1,
     description='Predictions generate by our production model',
     primary_key=['pickup_location_id', 'pickup_ts'],
     event_time='pickup_ts'
@@ -72,6 +72,9 @@ N_HYPERPARAMETER_SEARCH_TRIALS = 1
 
 # Maximum Mean Absolute Error we allow our production model to have
 MAX_MAE = 30.0
+
+MONITORING_FV_NAME = 'monitoring_feature_view'
+MONITORING_FV_VERSION = 4
 
 
 # Debugging...!

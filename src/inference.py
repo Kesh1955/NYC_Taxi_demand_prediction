@@ -5,6 +5,7 @@ import hopsworks
 import pandas as pd
 import numpy as np
 
+import streamlit as st 
 import src.config as config
 from src.feature_store_api import get_feature_store, get_or_create_feature_view
 from src.config import FEATURE_VIEW_METADATA
@@ -83,6 +84,172 @@ def diagnose_timeseries_completeness(ts_data, n_features):
         'is_complete': len(ts_data) == n_features * len(ts_data['pickup_location_id'].unique())
     }
 
+from datetime import datetime, timedelta
+from pathlib import Path
+
+# CURRENT_DATE TEST
+current_date = pd.to_datetime('2024-10-30 23:00:00')
+
+# This makes sure that every time this is ran it will update +1 hour 
+# as we have to manully set the date. We are simulating 28 days
+# of forecasting, which we know the outcome of
+def get_incremented_date(current_date):
+    # Set starting point
+    base_date = current_date
+    increment_file = Path('../tracking_time/last_increment.txt')
+    
+    # First run - create file with 0
+    if not increment_file.exists():
+        increment_file.write_text('0')
+        return base_date
+    
+    # Read current increment, add 1, save
+    increment = int(increment_file.read_text())
+    new_increment = increment + 1
+    increment_file.write_text(str(new_increment))
+    
+    # Return base_date + stored increment hours
+    return base_date + pd.Timedelta(hours=increment)
+
+def read_incremented_date(current_date):
+    base_date = current_date
+    increment_file = Path('../tracking_time/last_increment.txt')
+
+    # Read current increment
+    increment = int(increment_file.read_text())
+    date_with_increment = base_date + pd.Timedelta(hours=increment)
+    print(date_with_increment)
+
+    return date_with_increment
+
+
+# THIS WORKS 
+# This function is created to return the 'pickup_ts' column from the feature store
+# from FEATURE_VIEW_METADATA () and then create the model predictions_feature_group
+# which will include the pickup_ts column. I have done this separately to avoid 
+# causing errors on preivously created feature groups and views 
+# def load_batch_of_features_from_store_including_pickup_ts(current_date: pd.Timestamp) -> pd.DataFrame:
+#     fetch_data_from = (current_date - timedelta(days=28)).tz_localize(None)
+#     # fetch_data_to = (current_date + timedelta(hours=1)).tz_localize(None)
+#     fetch_data_to = get_incremented_date(current_date)
+    
+#     feature_view = get_or_create_feature_view(FEATURE_VIEW_METADATA) # time_series_hourly_feature_view'
+#     ts_data = feature_view.get_batch_data(
+#         start_time=fetch_data_from,
+#         end_time=fetch_data_to
+#     )
+
+#     print('---1---')
+#     print(ts_data.columns)
+
+#     # Sort and process data without filtering
+#     ts_data.sort_values(by=['pickup_location_id', 'pickup_hour'], inplace=True)
+#     print('---2---')
+#     print(ts_data.columns)
+    
+#     # Create feature matrix keeping all hours
+#     location_ids = ts_data['pickup_location_id'].unique()
+#     print('---3---')
+#     print(ts_data.columns)
+#     x = np.ndarray(shape=(len(location_ids), config.N_FEATURES), dtype=np.float32)
+#     print('---4---')
+#     print(ts_data.columns)
+    
+#     for i, location_id in enumerate(location_ids):
+#         ts_data_i = ts_data.loc[ts_data.pickup_location_id == location_id, :]
+#         ts_data_i = ts_data_i.sort_values(by=['pickup_hour'])
+        
+#         # Debugging output to identify the issue
+#         rides_values = ts_data_i['rides'].values
+#         print(f"Location ID: {location_id}")
+#         print(f"Number of data points: {len(rides_values)}")
+#         print(f"Expected: {config.N_FEATURES}")
+        
+#         if len(rides_values) < config.N_FEATURES:
+#             print(f"** Insufficient data for location_id {location_id}. Skipping or handling required. **")
+#             continue  # Skip this iteration for now
+        
+#         if len(rides_values) > config.N_FEATURES:
+#             print(f"** More data than expected for location_id {location_id}. Truncating to fit. **")
+        
+#         # Assignment (will trigger an error if len(rides_values) < config.N_FEATURES)
+#         x[i, :] = rides_values[:config.N_FEATURES]
+#         print(ts_data.columns)
+
+#     features = pd.DataFrame(
+#         x,
+#         columns=[f'rides_previous_{i+1}_hour' for i in reversed(range(config.N_FEATURES))]
+#     )
+#     print('---5---')
+#     print(features.columns)
+    
+#     features['pickup_hour'] = pd.to_datetime(fetch_data_to, format='%Y-%m-%d %H:%M:%S')
+#     print(f"pickup_hour column type: {features['pickup_hour'].dtype}")
+#     print(f"Sample pickup hours:\n{features['pickup_hour'].head()}")    
+
+#     features['pickup_location_id'] = location_ids
+#     features.sort_values(by=['pickup_location_id'], inplace=True)
+
+#     print(f"Current date: {current_date}")
+#     print(f"Fetch data to: {fetch_data_to}")
+#     print(f"First few pickup hours: {features['pickup_hour'].head()}")
+
+#     return features
+
+
+def load_batch_of_features_from_store_including_pickup_ts(current_date: pd.Timestamp) -> pd.DataFrame:
+    fetch_data_from = (current_date - timedelta(days=28)).tz_localize(None)
+    fetch_data_to = get_incremented_date(current_date)
+
+    feature_view = get_or_create_feature_view(FEATURE_VIEW_METADATA)
+    ts_data = feature_view.get_batch_data(
+        start_time = fetch_data_from,
+        end_time = fetch_data_to
+    )
+
+    ts_data.sort_values(by=['pickup_location_id', 'pickup_hour'], inplace = True)
+
+    location_ids = ts_data['pickup_location_id'].unique()
+    x = np.ndarray(shape=(len(location_ids), config.N_FEATURES), dtype=np.float32)
+
+    # Dictionary to store the last timestamp for each location
+    location_timestamps = {}
+    
+    for i, location_id in enumerate(location_ids):
+        ts_data_i = ts_data.loc[ts_data.pickup_location_id == location_id, :]
+        ts_data_i = ts_data_i.sort_values(by=['pickup_hour'])
+        
+        rides_values = ts_data_i['rides'].values
+
+        # Store the last timestamp for this location
+        location_timestamps[location_id] = ts_data_i['pickup_ts'].iloc[-1]
+        
+        if len(rides_values) > config.N_FEATURES:
+            rides_values = rides_values[:config.N_FEATURES]
+            
+        x[i, :] = rides_values[:config.N_FEATURES]
+    
+    features = pd.DataFrame(
+        x,
+        columns=[f'rides_previous_{i+1}_hour' for i in reversed(range(config.N_FEATURES))]
+    )
+    
+    features['pickup_hour'] = pd.to_datetime(fetch_data_to)
+    features['pickup_location_id'] = location_ids
+    # Add the pickup_ts column aligned with location_ids
+    features['pickup_ts'] = features['pickup_location_id'].map(location_timestamps)
+    
+    features.sort_values(by=['pickup_location_id'], inplace=True)
+    
+    # Print verification
+    print("Verification of alignment:")
+    print(features[['pickup_location_id', 'pickup_hour', 'pickup_ts']].head())
+    
+    return features
+
+
+
+#@st.cache_data
 def load_batch_of_features_from_store(current_date: pd.Timestamp) -> pd.DataFrame:
     fetch_data_from = (current_date - timedelta(days=28)).tz_localize(None)
     fetch_data_to = (current_date + timedelta(hours=1)).tz_localize(None)
@@ -92,6 +259,8 @@ def load_batch_of_features_from_store(current_date: pd.Timestamp) -> pd.DataFram
         start_time=fetch_data_from,
         end_time=fetch_data_to
     )
+
+    print(ts_data.columns)
 
     # Sort and process data without filtering
     ts_data.sort_values(by=['pickup_location_id', 'pickup_hour'], inplace=True)
@@ -126,6 +295,7 @@ def load_batch_of_features_from_store(current_date: pd.Timestamp) -> pd.DataFram
     )
     features['pickup_hour'] = current_date
     features['pickup_location_id'] = location_ids
+    features.sort_values(by=['pickup_location_id'], inplace=True)
 
     return features
 
@@ -218,6 +388,8 @@ def load_model_from_registry():
        
     return model
 
+
+@st.cache_data
 def load_predictions_from_store(
     from_pickup_hour: datetime,
     to_pickup_hour: datetime
@@ -275,7 +447,3 @@ def load_predictions_from_store(
     print(predictions.head())
     return predictions
 
-# # %%
-# from src.feature_store_api import get_or_create_feature_view
-# feature_view = get_or_create_feature_view(FEATURE_VIEW_METADATA)
-# # %%

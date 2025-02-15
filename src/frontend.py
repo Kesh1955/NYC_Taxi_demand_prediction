@@ -17,14 +17,8 @@ from src.plot import plot_one_sample
 st.set_page_config(layout="wide")
 
 
-# Doesn't work 
-# current_date = datetime.strptime('2023-10-31 00:00:03', '%Y-%m-%d %H:%M:%S')
-
-# Doesn't work 
-# current_date = pd.to_datetime('2024-10-30 23:00:00')
 current_date = pd.to_datetime('2024-10-30 23:00:00')
 
-# Doesn't work 
 # current_date = pd.to_datetime(aware_utcnow()).floor('h')
 st.title(f'Taxi demand prediction 🚕')
 st.header(f'{current_date} ')

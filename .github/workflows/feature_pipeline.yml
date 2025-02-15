@@ -7,7 +7,7 @@ on:
   workflow_dispatch:  # Allow the workflow to be manually triggered from the GitHub UI
 
 jobs:
-  feature_pipeline:
+  feature_pipeline: # Nsme of the job
     runs-on: ubuntu-latest  # Specify the OS to run the job on (latest Windows)
 
     steps:
@@ -20,7 +20,7 @@ jobs:
         with:
           python-version: '3.10'
 
-      # Installing Poetry
+      # Installing Poetry dependencies
       - name: Install Poetry
         uses: snok/install-poetry@v1
         with:
